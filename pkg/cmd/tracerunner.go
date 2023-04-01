@@ -61,6 +61,8 @@ type TraceRunnerOptions struct {
 
 	podUID string
 
+	containerName string
+
 	containerID string
 
 	// Process selector (similar to a label query) that identifies process to be traced.
@@ -120,6 +122,7 @@ func NewTraceRunnerCommand() *cobra.Command {
 
 	cmd.Flags().StringVar(&o.tracer, "tracer", "bpftrace", "Tracing system to use")
 	cmd.Flags().StringVar(&o.podUID, "pod-uid", "", "UID of target pod")
+	cmd.Flags().StringVar(&o.containerName, "container-name", "", "name of target container")
 	cmd.Flags().StringVar(&o.containerID, "container-id", "", "ID of target container")
 	cmd.Flags().StringVar(&o.processSelector, "process-selector", "", "Process Selector (similar to a label query) to filter on")
 	cmd.Flags().StringVar(&o.output, "output", "stdout", "Where to send tracing output (stdout or local path)")
@@ -345,7 +348,7 @@ func (o *TraceRunnerOptions) prepRbspyCommand() (*string, []string, postProcesso
 	program := rbspy
 	args := []string{"record", "--format", "speedscope", "--file", path.Join(MetadataDir, "profile.speedscope.json"), "--raw-file", path.Join(MetadataDir, "rbspy.raw.gz"), "--pid"}
 
-	foundPid, err := findHostPid(o.podUID, o.containerID, o.parsedSelector)
+	foundPid, err := findHostPid(o.podUID, o.containerID, o.containerName, o.parsedSelector)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -365,7 +368,7 @@ func (o *TraceRunnerOptions) prepFakeCommand() (*string, []string, error) {
 	program := fakeToolsDir + name
 	args := append([]string{}, o.programArgs...)
 
-	foundPid, err := findHostPid(o.podUID, o.containerID, o.parsedSelector)
+	foundPid, err := findHostPid(o.podUID, o.containerID, o.containerName, o.parsedSelector)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -378,19 +381,20 @@ func (o *TraceRunnerOptions) prepFakeCommand() (*string, []string, error) {
 }
 
 func (o *TraceRunnerOptions) findTargetPidForPod() (string, error) {
-		var pid string
-		var err error
-		if o.processSelector != "" {
-			pid, err = findHostPid(o.podUID, o.containerID, o.parsedSelector)
-			if err != nil {
-				return "", err
-			}
-		} else {
-			pid, err = procfs.FindPidByPodContainer(o.podUID, o.containerID)
-			if err != nil {
-				return "", err
-			}
+	var pid string
+	var err error
+	fmt.Printf("processSelector = %s\n", o.processSelector)
+	if o.processSelector != "" {
+		pid, err = findHostPid(o.podUID, o.containerID, o.containerName, o.parsedSelector)
+		if err != nil {
+			return "", err
 		}
+	} else {
+		pid, err = procfs.FindPidByPodContainer(o.podUID, o.containerID, o.containerName)
+		if err != nil {
+			return "", err
+		}
+	}
 
 	return pid, nil
 }
@@ -410,8 +414,8 @@ func findProcPid(targetPid string, hostPids []string) (string, error) {
 	return "", fmt.Errorf("pid %s not found; is it still running?", targetPid)
 }
 
-func findHostPid(podUID, containerID string, selector *tracejob.ProcessSelector) (string, error) {
-	containerPid, err := procfs.FindPidByPodContainer(podUID, containerID)
+func findHostPid(podUID, containerID string, containerName string, selector *tracejob.ProcessSelector) (string, error) {
+	containerPid, err := procfs.FindPidByPodContainer(podUID, containerID, containerName)
 	if err != nil {
 		return "", err
 	}

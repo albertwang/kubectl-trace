@@ -59,9 +59,10 @@ This struct will be used when creating the TraceJob
 */
 
 type TraceJobTarget struct {
-	Node        string // Used for tracejob NodeSelector
-	PodUID      string // passed as argument to trace-runner
-	ContainerID string // passed as argument to trace-runner
+	Node          string // Used for tracejob NodeSelector
+	PodUID        string // passed as argument to trace-runner
+	ContainerID   string // passed as argument to trace-runner
+	ContainerName string // passed as argument to trace-runner
 }
 
 /*
@@ -280,6 +281,7 @@ func resolvePodToTarget(podClient corev1.PodInterface, resourceID, container, ta
 			containerID := strings.TrimPrefix(s.ContainerID, "docker://")
 			containerID = strings.TrimPrefix(containerID, "containerd://")
 			target.ContainerID = containerID
+			target.ContainerName = targetContainer
 			break
 		}
 	}

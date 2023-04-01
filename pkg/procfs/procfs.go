@@ -14,7 +14,7 @@ import (
 
 var ProcFs = afero.NewOsFs()
 
-func FindPidByPodContainer(podUID, containerID string) (string, error) {
+func FindPidByPodContainer(podUID, containerID string, containerName string) (string, error) {
 	d, err := ProcFs.Open("/proc")
 
 	if err != nil {
@@ -59,7 +59,12 @@ func FindPidByPodContainer(podUID, containerID string) (string, error) {
 				needle := path.Join(podUID, containerID)
 				if strings.Contains(root, needle) {
 					return dname, nil
+				} else {
+					if strings.Contains(root, podUID) && (strings.Contains(root, containerID) || strings.Contains(root, containerName)) {
+						return dname, nil
+					}
 				}
+
 			}
 		}
 	}

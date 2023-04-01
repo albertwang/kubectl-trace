@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"path"
 	"strconv"
+	"strings"
 
 	jsonpatch "github.com/evanphx/json-patch"
 	"github.com/iovisor/kubectl-trace/pkg/meta"
@@ -243,6 +244,7 @@ func (nj *TraceJob) Job() *batchv1.Job {
 		"--tracer=" + nj.Tracer,
 		"--pod-uid=" + nj.Target.PodUID,
 		"--container-id=" + nj.Target.ContainerID,
+		"--container-name=" + nj.Target.ContainerName,
 		"--process-selector=" + nj.ProcessSelector,
 		"--output=" + nj.Output,
 	}
@@ -259,6 +261,11 @@ func (nj *TraceJob) Job() *batchv1.Job {
 
 	commonMeta := *nj.Meta()
 	cm := nj.ConfigMap()
+
+	hostnameWithoutDomain := nj.Target.Node
+	if strings.Contains(nj.Target.Node, ".") {
+		hostnameWithoutDomain = strings.SplitN(nj.Target.Node, ".", 2)[0]
+	}
 
 	job := &batchv1.Job{
 		ObjectMeta: commonMeta,
@@ -301,6 +308,14 @@ func (nj *TraceJob) Job() *batchv1.Job {
 							},
 						},
 						apiv1.Volume{
+							Name: "usr-src",
+							VolumeSource: apiv1.VolumeSource{
+								HostPath: &apiv1.HostPathVolumeSource{
+									Path: "/usr/src",
+								},
+							},
+						},
+						apiv1.Volume{
 							Name: "trace-output",
 							VolumeSource: apiv1.VolumeSource{
 								EmptyDir: &apiv1.EmptyDirVolumeSource{
@@ -311,11 +326,12 @@ func (nj *TraceJob) Job() *batchv1.Job {
 					},
 					Containers: []apiv1.Container{
 						apiv1.Container{
-							Name:    nj.Name,
-							Image:   nj.ImageNameTag,
-							Command: traceCmd,
-							TTY:     true,
-							Stdin:   true,
+							Name:            nj.Name,
+							Image:           nj.ImageNameTag,
+							Command:         traceCmd,
+							TTY:             true,
+							Stdin:           true,
+							ImagePullPolicy: "IfNotPresent",
 							Resources: apiv1.ResourceRequirements{
 								Requests: apiv1.ResourceList{
 									apiv1.ResourceCPU:    resource.MustParse("100m"),
@@ -335,6 +351,11 @@ func (nj *TraceJob) Job() *batchv1.Job {
 								apiv1.VolumeMount{
 									Name:      "sys",
 									MountPath: "/sys",
+									ReadOnly:  true,
+								},
+								apiv1.VolumeMount{
+									Name:      "usr-src",
+									MountPath: "/usr/src",
 									ReadOnly:  true,
 								},
 								apiv1.VolumeMount{
@@ -371,7 +392,7 @@ func (nj *TraceJob) Job() *batchv1.Job {
 											apiv1.NodeSelectorRequirement{
 												Key:      "kubernetes.io/hostname",
 												Operator: apiv1.NodeSelectorOpIn,
-												Values:   []string{nj.Target.Node},
+												Values:   []string{hostnameWithoutDomain, nj.Target.Node},
 											},
 										},
 									},
